@@ -1,0 +1,42 @@
+groups:
+  - name: loki.rules
+    rules:
+      # 1. Alert if Loki is not ingesting logs
+      - alert: LokiIngestionStopped
+        expr: rate(loki_distributor_bytes_received_total[5m]) < 100
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Loki ingestion seems to have stopped."
+          description: "No logs have been ingested in the last 5 minutes."
+
+      # 2. Alert if Loki memory usage is high
+      - alert: LokiMemoryHigh
+        expr: process_resident_memory_bytes{job="loki"} > 3.5 * 1024 * 1024 * 1024  # 3.5GB
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Loki memory usage is high."
+          description: "Memory usage > 3.5GB for 2 minutes."
+
+      # 3. Alert if too many failed WAL writes
+      - alert: LokiWALFailures
+        expr: increase(loki_ingester_wal_failed_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Loki WAL (Write-Ahead Log) failures detected."
+          description: "WAL failures may indicate disk problems or crashes."
+
+      # 4. Alert if compactor has issues
+      - alert: LokiCompactorErrors
+        expr: increase(loki_compactor_compaction_runs_failed_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Loki compactor failure."
+          description: "Compactor jobs have failed in last 5 minutes."

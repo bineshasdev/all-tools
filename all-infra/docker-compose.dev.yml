@@ -1,0 +1,154 @@
+version: '3.8'
+
+services:
+ # Since the Loki containers are running as user 10001 and the mounted data volume is owned by root,
+  # Loki would not have permissions to create the directories.
+  # Therefore the init container changes permissions of the mounted directory.
+  init:
+    image: &lokiImage grafana/loki:latest
+    user: root
+    entrypoint:
+      - "chown"
+      - "10001:10001"
+      - "/loki"
+    volumes:
+      - ./loki:/loki
+    networks:
+      - devnet
+      
+  postgres:
+    image: postgres:15
+    container_name: keycloak-db
+    restart: always
+    shm_size: 128mb
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak123
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - devnet
+
+  adminer:
+    image: adminer
+    container_name: adminer
+    restart: always
+    ports:
+      - 7090:8080    
+    networks:
+      - devnet  
+  keycloak:
+    image: quay.io/keycloak/keycloak:latest
+    command: start-dev
+    environment:
+      KC_DB: postgres
+      KC_DB_URL_HOST: keycloak-db
+      KC_DB_URL_PORT: 5432
+      KC_DB_SCHEMA: public
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak123
+      KC_METRICS_ENABLED: "true"   # lowercase string!
+      KC_HEALTH_ENABLED: "true"
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin123 
+    ports:
+      - "9080:8080"
+      - "9000:9000"
+    volumes:
+      - ./data:/opt/keycloak/data
+      - ./themes:/opt/keycloak/themes
+      - ./config:/opt/keycloak/conf
+    restart: unless-stopped    
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - devnet 
+  prometheus:
+    image: bitnami/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      -  ./prometheus/rules:/etc/prometheus/rules
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - devnet 
+
+  loki:
+    image: *lokiImage
+    container_name: loki
+    mem_limit: 4g 
+    command: 
+        - "-config.file=/etc/loki/loki-config.yaml"
+        - "-config.expand-env=true"
+    environment:
+      - LOKI_ENABLE_TSDB=true
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki/config.yaml:/etc/loki/loki-config.yaml
+    
+    networks:
+      - devnet
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    depends_on:
+      - loki
+      - prometheus
+    ports:
+      - "3000:3000"
+    volumes:  
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
+      - grafana:/var/lib/grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    networks:
+      - devnet
+  grafana-agent:
+    image: grafana/agent:v0.38.1
+    container_name: grafana-agent
+    command: ["run", "--server.http.listen-addr=0.0.0.0:12345", "/etc/agent/agent.yaml"]
+    volumes:
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./agent/agent.yaml:/etc/agent/agent.yaml
+    depends_on:
+      - loki
+      - prometheus
+    networks:
+      - devnet
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: jaeger
+    ports:
+      - "16686:16686"
+      - "14268:14268"
+    networks:
+      - devnet
+
+  consul:
+    image: hashicorp/consul:latest
+    container_name: consul
+    ports:
+      - "8500:8500"
+    volumes:
+      - ./consul/config:/consul/config
+    networks:
+      - devnet
+
+volumes: 
+  postgres_data:
+  prometheus-data:
+  loki:
+  grafana-agent:
+  grafana:
+
+networks:
+  devnet:
+    driver: bridge
