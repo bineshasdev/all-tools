@@ -85,16 +85,19 @@ Service discovery and configuration management tool.
 
 1. **Clone the Repository**:
    ```bash
-   git clone https://github.com/your-repo/microservice-project.git
-   cd microservice-project
+   git clone [https://github.com/your-repo/microservice-project.git](https://github.com/bineshasdev/all-tools.git)
+   cd all-infra
    ```
 
 2. **Start the Services**:
    Use Docker Compose to bring up the entire stack:
    ```bash
-   docker-compose up -d
+   docker-compose -f docker-compose.dev.yml up -d
    ```
-
+   If you are using Podman Compose to bring up the entire stack:
+   ```bash
+   podman-compose -f docker-compose.dev.yml up -d
+   ```
 3. **Access Services**:
    - **Keycloak Admin Console**: [http://localhost:9080](http://localhost:9080)
    - **Prometheus Dashboard**: [http://localhost:9090](http://localhost:9090)
@@ -129,10 +132,13 @@ All services are connected to a bridge network `devnet`, ensuring they can commu
 - To stop the services, run:
   ```bash
   docker-compose down
+  podman-compose down
+  
   ```
 - To view logs for a specific service:
   ```bash
   docker-compose logs <service-name>
+  podman-compose logs <service-name>
   ```
 
 ## Additional Information
